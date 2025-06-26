@@ -32,6 +32,96 @@ Built with the [Meltano SDK](https://sdk.meltano.com) for Singer Taps and Target
 
 A full list of supported settings and capabilities is available by running: `tap-hubspot --about`
 
+## Configuring Properties in Meltano
+
+When using this tap with Meltano, you can control which properties are synced for each object type using Meltano's `select` and `metadata` configuration. This allows you to limit the data being extracted to only the properties you need.
+
+### Example: Limiting Contact Properties
+
+To sync only specific contact properties, update your `meltano.yml`:
+
+```yaml
+plugins:
+  extractors:
+  - name: tap-hubspot
+    namespace: tap_hubspot
+    pip_url: -e .
+    capabilities:
+    - state
+    - catalog
+    - discover
+    settings:
+    - name: access_token
+      kind: password
+    - name: start_date
+      value: '2010-01-01T00:00:00Z'
+    config:
+      start_date: '2010-01-01T00:00:00Z'
+    select:
+      # Select only specific contact properties
+      - contacts.properties.firstname
+      - contacts.properties.lastname
+      - contacts.properties.email
+      - contacts.properties.phone
+      # Select all deal properties
+      - deals.*
+      # Select all quote properties
+      - quotes.*
+```
+
+### Example: Limiting Multiple Object Types
+
+```yaml
+plugins:
+  extractors:
+  - name: tap-hubspot
+    namespace: tap_hubspot
+    pip_url: -e .
+    capabilities:
+    - state
+    - catalog
+    - discover
+    settings:
+    - name: access_token
+      kind: password
+    - name: start_date
+      value: '2010-01-01T00:00:00Z'
+    config:
+      start_date: '2010-01-01T00:00:00Z'
+    select:
+      # Contact properties
+      - contacts.properties.firstname
+      - contacts.properties.lastname
+      - contacts.properties.email
+      - contacts.properties.company
+      # Company properties
+      - companies.properties.name
+      - companies.properties.domain
+      - companies.properties.industry
+      # Deal properties
+      - deals.properties.dealname
+      - deals.properties.amount
+      - deals.properties.dealstage
+      - deals.properties.closedate
+```
+
+### Property Selection Patterns
+
+- `contacts.properties.*` - All contact properties
+- `contacts.properties.firstname` - Specific contact property
+- `deals.*` - All deal data (including properties, associations, etc.)
+- `companies.properties.name` - Specific company property
+
+### Discovering Available Properties
+
+To see all available properties for each object type, run:
+
+```bash
+meltano invoke tap-hubspot --discover
+```
+
+This will show you the complete schema including all available properties that you can select.
+
 # Setup
 
 This is a [Singer](https://singer.io) tap that produces JSON-formatted data following the [Singer spec](https://github.com/singer-io/getting-started/blob/master/SPEC.md).

@@ -23,6 +23,24 @@ plugins:
       value: '2010-01-01T00:00:00Z'
     config:
       start_date: '2010-01-01T00:00:00Z'
+    # Example: Limit properties to only what you need
+    # Uncomment and modify the select section below to limit properties
+    # select:
+    #   # Deal properties - only specific ones
+    #   - deals.properties.dealname
+    #   - deals.properties.amount
+    #   - deals.properties.dealstage
+    #   - deals.properties.closedate
+    #   # Quote properties - only specific ones  
+    #   - quotes.properties.hs_title
+    #   - quotes.properties.hs_expiration_date
+    #   - quotes.properties.hs_status
+    #   # Line item properties - only specific ones
+    #   - line_items.properties.hs_product_id
+    #   - line_items.properties.hs_quantity
+    #   # All owner data
+    #   - owners.*
+    # Current configuration - all properties for selected streams
     select:
       - deals.*
       - quotes.*

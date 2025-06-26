@@ -87,12 +87,41 @@ class HubspotStream(RESTStream):
         params["limit"] = 100
         return params
     
-    def get_selected_properties(self) -> List[dict]:
+    def get_selected_properties(self) -> List[str]:
+        """Get properties to sync based on metadata selection (Meltano compatible)."""
+        # Get properties selected via metadata (Meltano select/metadata)
         selected_properties = [
             key[-1] for key, value in self.metadata.items()
             if value.selected and len(key) > 0
-            ]
-        return list(set(self.properties).intersection(selected_properties))
+        ]
+        
+        # Filter to only include properties that actually exist in HubSpot
+        available_properties = [prop["name"] for prop in self.get_properties()]
+        valid_selected_properties = list(set(selected_properties).intersection(available_properties))
+        
+        # Log information about property selection
+        if selected_properties:
+            self.logger.info(
+                f"Stream '{self.name}': {len(valid_selected_properties)} properties selected "
+                f"out of {len(available_properties)} available properties"
+            )
+            
+            # Log warning for invalid properties
+            invalid_properties = [prop for prop in selected_properties if prop not in available_properties]
+            if invalid_properties:
+                self.logger.warning(
+                    f"Stream '{self.name}': Invalid properties in selection: {invalid_properties}. "
+                    f"These properties don't exist in HubSpot and will be ignored."
+                )
+        else:
+            self.logger.info(
+                f"Stream '{self.name}': No properties explicitly selected, "
+                f"will use all available properties ({len(available_properties)} total)"
+            )
+            # If no properties are selected, use all available properties
+            valid_selected_properties = available_properties
+        
+        return valid_selected_properties
 
     def prepare_request_payload(
         self, context: Optional[dict], next_page_token: Optional[Any]
@@ -170,14 +199,22 @@ class HubspotStream(RESTStream):
         objects = HUBSPOT_OBJECTS
         params = []
 
+        # Get the properties that should be included based on selection
+        selected_property_names = self.get_selected_properties()
+        
+        # Store the selected properties for use in URL params
+        self.properties = selected_property_names
+
         for prop in properties_hub:
             name = prop["name"]
-            params.append(name)
-            type = self.get_json_schema(prop["type"])
-            if name in poorly_cast:
-                internal_properties.append(th.Property(name, th.StringType()))
-            else:
-                internal_properties.append(th.Property(name, type))
+            # Only include properties that are selected
+            if name in selected_property_names:
+                params.append(name)
+                type = self.get_json_schema(prop["type"])
+                if name in poorly_cast:
+                    internal_properties.append(th.Property(name, th.StringType()))
+                else:
+                    internal_properties.append(th.Property(name, type))
 
         properties.append(th.Property("updatedAt", th.DateTimeType()))
         properties.append(th.Property("createdAt", th.DateTimeType()))
