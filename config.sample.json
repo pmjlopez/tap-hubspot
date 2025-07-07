@@ -4,5 +4,40 @@
   "client_secret": "my_secret",
   "refresh_token": "my_token",
   "start_date": "2017-01-01T00:00:00Z",
-  "disable_collection": false
+  "disable_collection": false,
+  "selected_properties": {
+    "deals": [
+      "dealname",
+      "amount",
+      "dealstage",
+      "closedate",
+      "pipeline",
+      "hs_is_closed",
+      "hs_is_closed_won",
+      "hs_is_closed_lost",
+      "hs_deal_stage_probability",
+      "hs_createdate",
+      "hs_lastmodifieddate"
+    ],
+    "contacts": [
+      "firstname",
+      "lastname",
+      "email",
+      "phone",
+      "company",
+      "jobtitle",
+      "hs_createdate",
+      "hs_lastmodifieddate"
+    ],
+    "companies": [
+      "name",
+      "domain",
+      "industry",
+      "city",
+      "state",
+      "country",
+      "hs_createdate",
+      "hs_lastmodifieddate"
+    ]
+  }
 }

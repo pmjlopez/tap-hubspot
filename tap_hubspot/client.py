@@ -89,39 +89,93 @@ class HubspotStream(RESTStream):
     
     def get_selected_properties(self) -> List[str]:
         """Get properties to sync based on metadata selection (Meltano compatible)."""
-        # Get properties selected via metadata (Meltano select/metadata)
-        selected_properties = [
-            key[-1] for key, value in self.metadata.items()
-            if value.selected and len(key) > 0
-        ]
-        
-        # Filter to only include properties that actually exist in HubSpot
-        available_properties = [prop["name"] for prop in self.get_properties()]
-        valid_selected_properties = list(set(selected_properties).intersection(available_properties))
-        
-        # Log information about property selection
-        if selected_properties:
-            self.logger.info(
-                f"Stream '{self.name}': {len(valid_selected_properties)} properties selected "
-                f"out of {len(available_properties)} available properties"
-            )
+        try:
+            # First, check if we have a catalog file with metadata
+            if hasattr(self, 'catalog') and self.catalog:
+                # Find the stream in the catalog
+                for stream in self.catalog.get('streams', []):
+                    if stream.get('tap_stream_id') == self.name:
+                        # Get selected properties from metadata
+                        selected_properties = []
+                        metadata = stream.get('metadata', [])
+                        
+                        for meta in metadata:
+                            breadcrumb = meta.get('breadcrumb', [])
+                            if len(breadcrumb) == 2 and breadcrumb[0] == 'properties':
+                                property_name = breadcrumb[1]
+                                if meta.get('metadata', {}).get('selected', False):
+                                    selected_properties.append(property_name)
+                        
+                        if selected_properties:
+                            self.logger.info(
+                                f"Stream '{self.name}': {len(selected_properties)} properties selected "
+                                f"from catalog metadata: {selected_properties[:5]}{'...' if len(selected_properties) > 5 else ''}"
+                            )
+                            return selected_properties
             
-            # Log warning for invalid properties
-            invalid_properties = [prop for prop in selected_properties if prop not in available_properties]
-            if invalid_properties:
-                self.logger.warning(
-                    f"Stream '{self.name}': Invalid properties in selection: {invalid_properties}. "
-                    f"These properties don't exist in HubSpot and will be ignored."
+            # Second, check if we have selected_properties in config
+            config_selected_properties = self.config.get('selected_properties', {})
+            if config_selected_properties and self.name in config_selected_properties:
+                selected_properties = config_selected_properties[self.name]
+                if selected_properties:
+                    self.logger.info(
+                        f"Stream '{self.name}': {len(selected_properties)} properties selected "
+                        f"from config: {selected_properties[:5]}{'...' if len(selected_properties) > 5 else ''}"
+                    )
+                    return selected_properties
+            
+            # Third, fallback to metadata system (for when no catalog is provided)
+            selected_properties = [
+                key[-1] for key, value in self.metadata.items()
+                if value.selected and len(key) > 0
+            ]
+            
+            # Filter to only include properties that actually exist in HubSpot
+            available_properties = [prop["name"] for prop in self.get_properties()]
+            valid_selected_properties = list(set(selected_properties).intersection(available_properties))
+            
+            # Log information about property selection
+            if selected_properties:
+                self.logger.info(
+                    f"Stream '{self.name}': {len(valid_selected_properties)} properties selected "
+                    f"out of {len(available_properties)} available properties"
                 )
-        else:
-            self.logger.info(
-                f"Stream '{self.name}': No properties explicitly selected, "
-                f"will use all available properties ({len(available_properties)} total)"
+                
+                # Log warning for invalid properties
+                invalid_properties = [prop for prop in selected_properties if prop not in available_properties]
+                if invalid_properties:
+                    self.logger.warning(
+                        f"Stream '{self.name}': Invalid properties in selection: {invalid_properties}. "
+                        f"These properties don't exist in HubSpot and will be ignored."
+                    )
+            else:
+                # If no properties are selected, use a default set of essential properties
+                # This prevents URI length issues while still getting the most important data
+                default_properties = self._get_default_properties()
+                valid_selected_properties = list(set(default_properties).intersection(available_properties))
+                
+                self.logger.info(
+                    f"Stream '{self.name}': No properties explicitly selected, "
+                    f"using {len(valid_selected_properties)} default properties out of {len(available_properties)} available"
+                )
+            
+            return valid_selected_properties
+            
+        except Exception as e:
+            # Fallback to default properties if metadata access fails
+            self.logger.warning(
+                f"Stream '{self.name}': Failed to read metadata, using default properties. Error: {e}"
             )
-            # If no properties are selected, use all available properties
-            valid_selected_properties = available_properties
-        
-        return valid_selected_properties
+            try:
+                available_properties = [prop["name"] for prop in self.get_properties()]
+                default_properties = self._get_default_properties()
+                return list(set(default_properties).intersection(available_properties))
+            except:
+                # Last resort: return empty list to prevent URI length issues
+                self.logger.warning(
+                    f"Stream '{self.name}': Failed to get properties, using empty list to prevent URI length issues"
+                )
+                return []
 
     def prepare_request_payload(
         self, context: Optional[dict], next_page_token: Optional[Any]
@@ -248,6 +302,80 @@ class HubspotStream(RESTStream):
             th.Property("properties", th.ObjectType(*internal_properties))
         )
         return th.PropertiesList(*properties).to_dict(), params
+
+    def _get_default_properties(self) -> List[str]:
+        """Get default properties for each stream to prevent URI length issues."""
+        default_properties_map = {
+            'deals': [
+                'dealname',
+                'amount',
+                'dealstage',
+                'closedate',
+                'pipeline',
+                'hs_is_closed',
+                'hs_is_closed_won',
+                'hs_is_closed_lost',
+                'hs_deal_stage_probability',
+                'hs_createdate',
+                'hs_lastmodifieddate'
+            ],
+            'contacts': [
+                'firstname',
+                'lastname',
+                'email',
+                'phone',
+                'company',
+                'jobtitle',
+                'hs_createdate',
+                'hs_lastmodifieddate'
+            ],
+            'companies': [
+                'name',
+                'domain',
+                'industry',
+                'city',
+                'state',
+                'country',
+                'hs_createdate',
+                'hs_lastmodifieddate'
+            ],
+            'meetings': [
+                'hs_timestamp',
+                'hs_meeting_title',
+                'hs_meeting_body',
+                'hs_meeting_start_time',
+                'hs_meeting_end_time',
+                'hs_createdate',
+                'hs_lastmodifieddate'
+            ],
+            'calls': [
+                'hs_call_title',
+                'hs_call_body',
+                'hs_call_duration',
+                'hs_call_start_time',
+                'hs_call_end_time',
+                'hs_createdate',
+                'hs_lastmodifieddate'
+            ],
+            'quotes': [
+                'hs_title',
+                'hs_amount',
+                'hs_expiration_date',
+                'hs_status',
+                'hs_createdate',
+                'hs_lastmodifieddate'
+            ],
+            'line_items': [
+                'hs_product_id',
+                'hs_quantity',
+                'hs_cost',
+                'hs_price',
+                'hs_createdate',
+                'hs_lastmodifieddate'
+            ]
+        }
+        
+        return default_properties_map.get(self.name, [])
 
     def get_properties(self) -> List[dict]:
         response = requests.get(

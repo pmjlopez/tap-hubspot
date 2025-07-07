@@ -1,5 +1,6 @@
 """Hubspot tap class."""
 
+import json
 from typing import List
 
 from singer_sdk import Stream, Tap
@@ -41,12 +42,6 @@ from tap_hubspot.streams import (
 )
 
 # from black import main
-
-
-
-
-
-
 
 STREAM_TYPES = [
     ## CRM
@@ -103,11 +98,45 @@ class TapHubspot(Tap):
             required=True,
             description="The earliest record date to sync",
         ),
+        th.Property(
+            "selected_properties",
+            th.ObjectType(
+                th.Property("call_dispositions", th.ArrayType(th.StringType), required=False),
+                th.Property("calls", th.ArrayType(th.StringType), required=False),
+                th.Property("companies", th.ArrayType(th.StringType), required=False),
+                th.Property("contacts", th.ArrayType(th.StringType), required=False),
+                th.Property("deals", th.ArrayType(th.StringType), required=False),
+                th.Property("meetings", th.ArrayType(th.StringType), required=False),
+                th.Property("owners", th.ArrayType(th.StringType), required=False),
+                th.Property("stages", th.ArrayType(th.StringType), required=False),
+            ),
+            required=False,
+            description="Object mapping stream names to arrays of property names to sync. This helps prevent URI length issues by limiting the properties fetched.",
+        ),
     ).to_dict()
 
     def discover_streams(self) -> List[Stream]:
         """Return a list of discovered streams."""
-        return [stream_class(tap=self) for stream_class in STREAM_TYPES]
+        streams = []
+        
+        # Load catalog if provided
+        catalog = None
+        if hasattr(self, 'catalog_path') and self.catalog_path:
+            try:
+                with open(self.catalog_path, 'r') as f:
+                    catalog = json.load(f)
+                self.logger.info(f"Loaded catalog from {self.catalog_path}")
+            except Exception as e:
+                self.logger.warning(f"Failed to load catalog from {self.catalog_path}: {e}")
+        
+        # Create streams with catalog
+        for stream_class in STREAM_TYPES:
+            stream = stream_class(tap=self)
+            if catalog:
+                stream.catalog = catalog
+            streams.append(stream)
+        
+        return streams
 
 
 if __name__ == "__main__":

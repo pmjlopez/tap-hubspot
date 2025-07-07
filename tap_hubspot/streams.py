@@ -107,7 +107,14 @@ class DealsStream(HubspotStream):
     def get_url_params(
         self, context: Optional[dict], next_page_token: Optional[Any]
     ) -> Dict[str, Any]:
+        # Get selected properties from Meltano configuration
         selected_properties = self.get_selected_properties()
+        
+        self.logger.info(
+            f"Deals stream: Using {len(selected_properties)} selected properties "
+            f"from Meltano configuration"
+        )
+        
         params = super().get_url_params(context, next_page_token)
         params["properties"] = ",".join(selected_properties)
         params["archived"] = context["archived"]
