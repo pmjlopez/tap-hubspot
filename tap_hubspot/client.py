@@ -222,9 +222,6 @@ class HubspotStream(RESTStream):
         """
         internal_properties: List[th.Property] = []
         properties: List[th.Property] = []
-
-        properties_hub = self.get_properties()
-        objects = HUBSPOT_OBJECTS
         params = []
 
         # Get the properties that should be included based on selection
@@ -232,17 +229,42 @@ class HubspotStream(RESTStream):
         
         # Store the selected properties for use in URL params
         self.properties = selected_property_names
-
-        for prop in properties_hub:
-            name = prop["name"]
-            # Only include properties that are selected
-            if name in selected_property_names:
+        
+        # If we have selected properties, use them directly
+        if selected_property_names:
+            # Try to get property types from API, but don't fail if it doesn't work
+            try:
+                properties_hub = self.get_properties()
+                property_types = {prop["name"]: prop["type"] for prop in properties_hub}
+            except Exception as e:
+                self.logger.warning(f"Failed to get property types from API: {e}. Using string type for all properties.")
+                property_types = {}
+            
+            for name in selected_property_names:
                 params.append(name)
-                type = self.get_json_schema(prop["type"])
+                # Use the property type from API if available, otherwise default to string
+                prop_type = property_types.get(name, "string")
+                type = self.get_json_schema(prop_type)
                 if name in poorly_cast:
                     internal_properties.append(th.Property(name, th.StringType()))
                 else:
                     internal_properties.append(th.Property(name, type))
+        else:
+            # Fallback to getting all properties if none are selected
+            try:
+                properties_hub = self.get_properties()
+                for prop in properties_hub:
+                    name = prop["name"]
+                    params.append(name)
+                    type = self.get_json_schema(prop["type"])
+                    if name in poorly_cast:
+                        internal_properties.append(th.Property(name, th.StringType()))
+                    else:
+                        internal_properties.append(th.Property(name, type))
+            except Exception as e:
+                self.logger.warning(f"Failed to get properties from API: {e}")
+        
+        objects = HUBSPOT_OBJECTS
 
         properties.append(th.Property("updatedAt", th.DateTimeType()))
         properties.append(th.Property("createdAt", th.DateTimeType()))
