@@ -88,7 +88,7 @@ class HubspotStream(RESTStream):
         return params
     
     def get_selected_properties(self) -> List[str]:
-        """Get properties to sync based on metadata selection (Meltano compatible)."""
+        """Get properties to sync based on configuration selection."""
         try:
             # First, check if we have a catalog file with metadata
             if hasattr(self, 'catalog') and self.catalog:
@@ -124,33 +124,10 @@ class HubspotStream(RESTStream):
                     )
                     return selected_properties
             
-            # Third, fallback to metadata system (for when no catalog is provided)
-            selected_properties = [
-                key[-1] for key, value in self.metadata.items()
-                if value.selected and len(key) > 0
-            ]
-            
-            # Filter to only include properties that actually exist in HubSpot
-            available_properties = [prop["name"] for prop in self.get_properties()]
-            valid_selected_properties = list(set(selected_properties).intersection(available_properties))
-            
-            # Log information about property selection
-            if selected_properties:
-                self.logger.info(
-                    f"Stream '{self.name}': {len(valid_selected_properties)} properties selected "
-                    f"out of {len(available_properties)} available properties"
-                )
-                
-                # Log warning for invalid properties
-                invalid_properties = [prop for prop in selected_properties if prop not in available_properties]
-                if invalid_properties:
-                    self.logger.warning(
-                        f"Stream '{self.name}': Invalid properties in selection: {invalid_properties}. "
-                        f"These properties don't exist in HubSpot and will be ignored."
-                    )
-            else:
-                # If no properties are selected, use a default set of essential properties
-                # This prevents URI length issues while still getting the most important data
+            # If no properties are explicitly selected, use a default set of essential properties
+            # This prevents URI length issues while still getting the most important data
+            try:
+                available_properties = [prop["name"] for prop in self.get_properties()]
                 default_properties = self._get_default_properties()
                 valid_selected_properties = list(set(default_properties).intersection(available_properties))
                 
@@ -158,24 +135,21 @@ class HubspotStream(RESTStream):
                     f"Stream '{self.name}': No properties explicitly selected, "
                     f"using {len(valid_selected_properties)} default properties out of {len(available_properties)} available"
                 )
-            
-            return valid_selected_properties
+                
+                return valid_selected_properties
+            except Exception as e:
+                self.logger.warning(
+                    f"Stream '{self.name}': Failed to get available properties, using default properties. Error: {e}"
+                )
+                # Return default properties without validation if API call fails
+                return self._get_default_properties()
             
         except Exception as e:
-            # Fallback to default properties if metadata access fails
+            # Fallback to default properties if anything fails
             self.logger.warning(
-                f"Stream '{self.name}': Failed to read metadata, using default properties. Error: {e}"
+                f"Stream '{self.name}': Failed to read property selection, using default properties. Error: {e}"
             )
-            try:
-                available_properties = [prop["name"] for prop in self.get_properties()]
-                default_properties = self._get_default_properties()
-                return list(set(default_properties).intersection(available_properties))
-            except:
-                # Last resort: return empty list to prevent URI length issues
-                self.logger.warning(
-                    f"Stream '{self.name}': Failed to get properties, using empty list to prevent URI length issues"
-                )
-                return []
+            return self._get_default_properties()
 
     def prepare_request_payload(
         self, context: Optional[dict], next_page_token: Optional[Any]
