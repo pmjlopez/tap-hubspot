@@ -4,7 +4,7 @@
 
 Built with the [Meltano Tap SDK](https://sdk.meltano.com) for Singer Taps.
 
-## What is this fork for?
+## What the fork?
 ### URI too long
 In my case Hubspot users created a lot of fields making hundreds of properties, and putting these all as parameters will cause an error.
 ### start_date is ignored during fetching from Hubspot
