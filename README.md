@@ -4,11 +4,11 @@
 
 Built with the [Meltano Tap SDK](https://sdk.meltano.com) for Singer Taps.
 
-# `tap-hubspot`
-
-Hubspot tap class.
-
-Built with the [Meltano SDK](https://sdk.meltano.com) for Singer Taps and Targets.
+## What is this fork for?
+### URI too long
+In my case Hubspot users created a lot of fields making hundreds of properties, and putting these all as parameters will cause an error.
+### start_date is ignored during fetching from Hubspot
+Every time I run my pipeline it still gets everything each time then filters them after, pretty much a waste for time and resources.
 
 ## Capabilities
 
