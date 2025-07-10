@@ -68,10 +68,8 @@ class MarketingEmailsStream(MarketingStream):
     def post_process(self, row: dict, context: Optional[dict]) -> dict:
         """As needed, append or transform raw data to match expected structure.
         Returns row, or None if row is to be excluded"""
-
-        if self.replication_key:
-            if row[self.replication_key].timestamp() <= self.get_starting_timestamp(context).astimezone(pytz.utc).timestamp():
-                return None
+        
+        # Note: Date filtering is now handled at the API level in the base HubspotStream class
         return row
 
     def get_url_params(
@@ -135,10 +133,8 @@ class MarketingCampaignsStream(MarketingStream):
     def post_process(self, row: dict, context: Optional[dict]) -> dict:
         """As needed, append or transform raw data to match expected structure.
         Returns row, or None if row is to be excluded"""
-
-        if self.replication_key:
-            if row[self.replication_key] <= int(self.get_starting_timestamp(context).astimezone(pytz.utc).strftime('%s')):
-                return None
+        
+        # Note: Date filtering is now handled at the API level in the base HubspotStream class
         return row
 
     def get_url_params(

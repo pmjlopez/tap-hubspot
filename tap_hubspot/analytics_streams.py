@@ -39,10 +39,8 @@ class AnalyticsStream(HubspotStream):
     def post_process(self, row: dict, context: Optional[dict]) -> dict:
         """As needed, append or transform raw data to match expected structure.
         Returns row, or None if row is to be excluded"""
-
-        if self.replication_key:
-            if row[self.replication_key] <= self.get_starting_timestamp(context).astimezone(pytz.utc):
-                return None
+        
+        # Note: Date filtering is now handled at the API level in the base HubspotStream class
         return row
 
 class AnalyticsViewsStream(AnalyticsStream):

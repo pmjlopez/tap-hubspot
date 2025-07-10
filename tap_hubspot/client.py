@@ -82,10 +82,69 @@ class HubspotStream(RESTStream):
     ) -> Dict[str, Any]:
         """Return a dictionary of values to be used in URL parameterization."""
         params: dict = {}
-        if next_page_token:
-            params["after"] = next_page_token
-        params["limit"] = 100
+        
+        # If using POST method, don't include properties in URL params
+        if self._should_use_post_method():
+            # Only include basic pagination and filtering in URL for POST
+            if next_page_token:
+                params["after"] = next_page_token
+            
+            # Add date filtering if this is an incremental stream with a start_date
+            if self.replication_method == "INCREMENTAL" and self.replication_key:
+                date_filter = self._get_date_filter_params()
+                if date_filter:
+                    params.update(date_filter)
+        else:
+            # For GET method, include everything in URL params
+            if next_page_token:
+                params["after"] = next_page_token
+            params["limit"] = 100
+            
+            # Add date filtering if this is an incremental stream with a start_date
+            if self.replication_method == "INCREMENTAL" and self.replication_key:
+                date_filter = self._get_date_filter_params()
+                if date_filter:
+                    params.update(date_filter)
+        
         return params
+    
+    def _get_date_filter_params(self) -> Optional[Dict[str, Any]]:
+        """Get date filtering parameters based on start_date from config."""
+        try:
+            start_date = self.config.get("start_date")
+            if not start_date:
+                return None
+            
+            # Convert start_date to timestamp for API filtering
+            if isinstance(start_date, str):
+                from singer_sdk._singerlib.utils import strptime_to_utc
+                start_timestamp = strptime_to_utc(start_date)
+            else:
+                start_timestamp = start_date
+            
+            # Convert to milliseconds timestamp for HubSpot API
+            start_ms = int(start_timestamp.timestamp() * 1000)
+            
+            # HubSpot CRM v3 API supports filtering by hs_createdate and hs_lastmodifieddate
+            # We'll filter for records that were either created OR modified after the start_date
+            # This ensures we don't miss records that were created before but modified after start_date
+            filter_params = {
+                "filter": f"(hs_createdate>={start_ms} OR hs_lastmodifieddate>={start_ms})"
+            }
+            
+            self.logger.info(
+                f"Stream '{self.name}': Adding date filter for records created or modified after {start_date} "
+                f"(timestamp: {start_ms})"
+            )
+            
+            return filter_params
+            
+        except Exception as e:
+            self.logger.warning(
+                f"Stream '{self.name}': Failed to add date filtering: {e}. "
+                "Continuing without date filter."
+            )
+            return None
     
     def get_selected_properties(self) -> List[str]:
         """Get properties to sync based on configuration selection."""
@@ -111,7 +170,7 @@ class HubspotStream(RESTStream):
                                 f"Stream '{self.name}': {len(selected_properties)} properties selected "
                                 f"from catalog metadata: {selected_properties[:5]}{'...' if len(selected_properties) > 5 else ''}"
                             )
-                            return selected_properties
+                            return self._ensure_date_properties_included(selected_properties)
             
             # Second, check if we have selected_properties in config
             config_selected_properties = self.config.get('selected_properties', {})
@@ -122,7 +181,7 @@ class HubspotStream(RESTStream):
                         f"Stream '{self.name}': {len(selected_properties)} properties selected "
                         f"from config: {selected_properties[:5]}{'...' if len(selected_properties) > 5 else ''}"
                     )
-                    return selected_properties
+                    return self._ensure_date_properties_included(selected_properties)
             
             # If no properties are explicitly selected, use a default set of essential properties
             # This prevents URI length issues while still getting the most important data
@@ -136,7 +195,7 @@ class HubspotStream(RESTStream):
                     f"using {len(valid_selected_properties)} default properties out of {len(available_properties)} available"
                 )
                 
-                return valid_selected_properties
+                return self._ensure_date_properties_included(valid_selected_properties)
             except Exception as e:
                 self.logger.warning(
                     f"Stream '{self.name}': Failed to get available properties, using default properties. Error: {e}"
@@ -150,15 +209,77 @@ class HubspotStream(RESTStream):
                 f"Stream '{self.name}': Failed to read property selection, using default properties. Error: {e}"
             )
             return self._get_default_properties()
+    
+    def _ensure_date_properties_included(self, properties: List[str]) -> List[str]:
+        """Ensure that date properties needed for filtering are always included."""
+        date_properties = ['hs_createdate', 'hs_lastmodifieddate']
+        result = properties.copy()
+        
+        for prop in date_properties:
+            if prop not in result:
+                result.append(prop)
+                self.logger.debug(f"Stream '{self.name}': Added required date property '{prop}' for filtering")
+        
+        return result
 
     def prepare_request_payload(
         self, context: Optional[dict], next_page_token: Optional[Any]
     ) -> Optional[dict]:
         """Prepare the data payload for the REST API request.
 
-        By default, no payload will be sent (return None).
+        For HubSpot CRM v3 API, we can use POST to avoid URL length issues
+        when there are many properties selected.
         """
+        # Check if we should use POST method (when there are many properties)
+        if self._should_use_post_method():
+            selected_properties = self.get_selected_properties()
+            
+            payload = {
+                "properties": selected_properties,
+                "limit": 100
+            }
+            
+            # Add date filtering if applicable
+            if self.replication_method == "INCREMENTAL" and self.replication_key:
+                date_filter = self._get_date_filter_params()
+                if date_filter:
+                    # Convert filter string to HubSpot's POST format
+                    filter_str = date_filter["filter"]
+                    payload["filter"] = filter_str
+            
+            # Add pagination if needed
+            if next_page_token:
+                payload["after"] = next_page_token
+            
+            # Add archived status if available
+            if context and "archived" in context:
+                payload["archived"] = context["archived"]
+            
+            # Add associations if this stream uses them
+            if hasattr(self, 'path') and 'objects' in self.path:
+                payload["associations"] = HUBSPOT_OBJECTS
+            
+            self.logger.info(
+                f"Stream '{self.name}': Using POST method with {len(selected_properties)} properties "
+                f"to avoid URL length issues"
+            )
+            
+            return payload
+        
         return None
+    
+    def _should_use_post_method(self) -> bool:
+        """Determine if we should use POST method instead of GET."""
+        # Use POST if we have more than 50 properties to avoid URL length issues
+        selected_properties = self.get_selected_properties()
+        return len(selected_properties) > 50
+    
+    @property
+    def http_method(self) -> str:
+        """Return the HTTP method to use for this stream."""
+        if self._should_use_post_method():
+            return "POST"
+        return "GET"
 
     def parse_response(self, response: requests.Response) -> Iterable[dict]:
         """Parse the response and return an iterator of result rows."""
@@ -371,7 +492,15 @@ class HubspotStream(RESTStream):
             ]
         }
         
-        return default_properties_map.get(self.name, [])
+        # Always include date properties for filtering if not already present
+        base_properties = default_properties_map.get(self.name, [])
+        date_properties = ['hs_createdate', 'hs_lastmodifieddate']
+        
+        for prop in date_properties:
+            if prop not in base_properties:
+                base_properties.append(prop)
+        
+        return base_properties
 
     def get_properties(self) -> List[dict]:
         response = requests.get(

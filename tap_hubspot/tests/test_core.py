@@ -1,6 +1,9 @@
 """Tests standard tap features using the built-in SDK tests library."""
 
 import datetime
+import pytest
+from unittest.mock import Mock
+from tap_hubspot.streams import ContactsStream
 
 from singer_sdk.testing import get_standard_tap_tests
 
@@ -58,3 +61,60 @@ def test_standard_tap_tests(requests_mock):
     tests = get_standard_tap_tests(TapHubspot, config=SAMPLE_CONFIG)
     for test in tests:
         test()
+
+
+def test_post_method_triggered_for_many_properties():
+    # Simulate a config with many properties
+    many_properties = [f"field_{i}" for i in range(60)]
+    config = {
+        "access_token": "dummy",
+        "selected_properties": {"contacts": many_properties},
+        "start_date": "2023-01-01T00:00:00Z"
+    }
+    mock_tap = Mock()
+    mock_tap.config = config
+    mock_tap.logger = Mock()
+    mock_tap.name = "tap-hubspot"
+    stream = ContactsStream(tap=mock_tap)
+    stream.logger = Mock()
+    stream.name = "contacts"
+    
+    # Should use POST
+    assert stream._should_use_post_method() is True
+    assert stream.http_method == "POST"
+    payload = stream.prepare_request_payload(context={"archived": False}, next_page_token=None)
+    assert payload is not None
+    assert "properties" in payload
+    # Should include all fields plus the two date properties
+    assert set(payload["properties"]) == set(many_properties + ["hs_createdate", "hs_lastmodifieddate"])
+    assert payload["archived"] is False
+    assert payload["limit"] == 100
+    # Should include filter for incremental
+    assert "filter" in payload
+
+
+def test_get_method_for_few_properties():
+    # Simulate a config with few properties
+    few_properties = ["firstname", "lastname"]
+    config = {
+        "access_token": "dummy",
+        "selected_properties": {"contacts": few_properties},
+        "start_date": "2023-01-01T00:00:00Z"
+    }
+    mock_tap = Mock()
+    mock_tap.config = config
+    mock_tap.logger = Mock()
+    mock_tap.name = "tap-hubspot"
+    stream = ContactsStream(tap=mock_tap)
+    stream.logger = Mock()
+    stream.name = "contacts"
+    
+    # Should use GET
+    assert stream._should_use_post_method() is False
+    assert stream.http_method == "GET"
+    payload = stream.prepare_request_payload(context={"archived": False}, next_page_token=None)
+    assert payload is None
+    # Properties should be in URL params and include the date properties
+    params = stream.get_url_params(context={"archived": False}, next_page_token=None)
+    expected_properties = few_properties + ["hs_createdate", "hs_lastmodifieddate"]
+    assert set(params["properties"].split(",")) == set(expected_properties)
