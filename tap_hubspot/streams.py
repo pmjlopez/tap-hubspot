@@ -20,9 +20,11 @@ class MeetingsStream(HubspotStream):
     def get_url_params(
         self, context: Optional[dict], next_page_token: Optional[Any]
     ) -> Dict[str, Any]:
-        selected_properties = self.get_selected_properties()
         params = super().get_url_params(context, next_page_token)
-        params["properties"] = ",".join(selected_properties)
+        # Only add properties to URL if using GET method
+        if not self._should_use_post_method():
+            selected_properties = self.get_selected_properties()
+            params["properties"] = ",".join(selected_properties)
         return params
 
     @property
@@ -40,9 +42,11 @@ class CallsStream(HubspotStream):
     def get_url_params(
         self, context: Optional[dict], next_page_token: Optional[Any]
     ) -> Dict[str, Any]:
-        selected_properties = self.get_selected_properties()
         params = super().get_url_params(context, next_page_token)
-        params["properties"] = ",".join(selected_properties)
+        # Only add properties to URL if using GET method
+        if not self._should_use_post_method():
+            selected_properties = self.get_selected_properties()
+            params["properties"] = ",".join(selected_properties)
         return params
 
     @property
@@ -118,7 +122,9 @@ class DealsStream(HubspotStream):
         )
         
         params = super().get_url_params(context, next_page_token)
-        params["properties"] = ",".join(selected_properties)
+        # Only add properties to URL if using GET method
+        if not self._should_use_post_method():
+            params["properties"] = ",".join(selected_properties)
         params["archived"] = context["archived"]
         params["associations"] = ",".join(HUBSPOT_OBJECTS)
         return params
@@ -418,6 +424,81 @@ class QuotesStream(HubspotStream):
 class LineItemsStream(HubspotStream):
     name = "line_items"
     path = "/crm/v3/objects/line_items"
+    primary_keys = ["id"]
+    partitions = [{"archived": True}, {"archived": False}]
+
+    def get_url_params(
+        self, context: Optional[dict], next_page_token: Optional[Any]
+    ) -> Dict[str, Any]:
+        params = super().get_url_params(context, next_page_token)
+        # Only add properties to URL if using GET method
+        if not self._should_use_post_method():
+            selected_properties = self.get_selected_properties()
+            params["properties"] = ",".join(selected_properties)
+        params["archived"] = context["archived"]
+        params["associations"] = ",".join(HUBSPOT_OBJECTS)
+        return params
+
+    @property
+    def schema(self) -> dict:
+        if self.cached_schema is None:
+            self.cached_schema, self.properties = self.get_custom_schema()
+        return self.cached_schema
+
+
+class NotesStream(HubspotStream):
+    name = "notes"
+    path = "/crm/v3/objects/notes"
+    primary_keys = ["id"]
+    partitions = [{"archived": True}, {"archived": False}]
+
+    def get_url_params(
+        self, context: Optional[dict], next_page_token: Optional[Any]
+    ) -> Dict[str, Any]:
+        params = super().get_url_params(context, next_page_token)
+        # Only add properties to URL if using GET method
+        if not self._should_use_post_method():
+            selected_properties = self.get_selected_properties()
+            params["properties"] = ",".join(selected_properties)
+        params["archived"] = context["archived"]
+        params["associations"] = ",".join(HUBSPOT_OBJECTS)
+        return params
+
+    @property
+    def schema(self) -> dict:
+        if self.cached_schema is None:
+            self.cached_schema, self.properties = self.get_custom_schema()
+        return self.cached_schema
+
+
+class TasksStream(HubspotStream):
+    name = "tasks"
+    path = "/crm/v3/objects/tasks"
+    primary_keys = ["id"]
+    partitions = [{"archived": True}, {"archived": False}]
+
+    def get_url_params(
+        self, context: Optional[dict], next_page_token: Optional[Any]
+    ) -> Dict[str, Any]:
+        params = super().get_url_params(context, next_page_token)
+        # Only add properties to URL if using GET method
+        if not self._should_use_post_method():
+            selected_properties = self.get_selected_properties()
+            params["properties"] = ",".join(selected_properties)
+        params["archived"] = context["archived"]
+        params["associations"] = ",".join(HUBSPOT_OBJECTS)
+        return params
+
+    @property
+    def schema(self) -> dict:
+        if self.cached_schema is None:
+            self.cached_schema, self.properties = self.get_custom_schema()
+        return self.cached_schema
+
+
+class EmailsStream(HubspotStream):
+    name = "emails"
+    path = "/crm/v3/objects/emails"
     primary_keys = ["id"]
     partitions = [{"archived": True}, {"archived": False}]
 

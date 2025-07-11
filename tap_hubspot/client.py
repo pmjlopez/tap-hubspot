@@ -183,8 +183,8 @@ class HubspotStream(RESTStream):
                     )
                     return self._ensure_date_properties_included(selected_properties)
             
-            # If no properties are explicitly selected, use a default set of essential properties
-            # This prevents URI length issues while still getting the most important data
+            # If no properties are explicitly selected, use all available properties
+            # POST method support eliminates URI length concerns
             try:
                 available_properties = [prop["name"] for prop in self.get_properties()]
                 default_properties = self._get_default_properties()
@@ -227,8 +227,8 @@ class HubspotStream(RESTStream):
     ) -> Optional[dict]:
         """Prepare the data payload for the REST API request.
 
-        For HubSpot CRM v3 API, we can use POST to avoid URL length issues
-        when there are many properties selected.
+        For HubSpot CRM v3 API, we can use POST to handle large numbers of properties
+        by sending them in the request body instead of URL parameters.
         """
         # Check if we should use POST method (when there are many properties)
         if self._should_use_post_method():
@@ -261,7 +261,7 @@ class HubspotStream(RESTStream):
             
             self.logger.info(
                 f"Stream '{self.name}': Using POST method with {len(selected_properties)} properties "
-                f"to avoid URL length issues"
+                f"to handle large property set efficiently"
             )
             
             return payload
@@ -270,7 +270,7 @@ class HubspotStream(RESTStream):
     
     def _should_use_post_method(self) -> bool:
         """Determine if we should use POST method instead of GET."""
-        # Use POST if we have more than 50 properties to avoid URL length issues
+        # Use POST if we have more than 50 properties for efficient handling
         selected_properties = self.get_selected_properties()
         return len(selected_properties) > 50
     
@@ -421,86 +421,85 @@ class HubspotStream(RESTStream):
         return th.PropertiesList(*properties).to_dict(), params
 
     def _get_default_properties(self) -> List[str]:
-        """Get default properties for each stream to prevent URI length issues."""
-        default_properties_map = {
-            'deals': [
-                'dealname',
-                'amount',
-                'dealstage',
-                'closedate',
-                'pipeline',
-                'hs_is_closed',
-                'hs_is_closed_won',
-                'hs_is_closed_lost',
-                'hs_deal_stage_probability',
-                'hs_createdate',
-                'hs_lastmodifieddate'
-            ],
-            'contacts': [
-                'firstname',
-                'lastname',
-                'email',
-                'phone',
-                'company',
-                'jobtitle',
-                'hs_createdate',
-                'hs_lastmodifieddate'
-            ],
-            'companies': [
-                'name',
-                'domain',
-                'industry',
-                'city',
-                'state',
-                'country',
-                'hs_createdate',
-                'hs_lastmodifieddate'
-            ],
-            'meetings': [
-                'hs_timestamp',
-                'hs_meeting_title',
-                'hs_meeting_body',
-                'hs_meeting_start_time',
-                'hs_meeting_end_time',
-                'hs_createdate',
-                'hs_lastmodifieddate'
-            ],
-            'calls': [
-                'hs_call_title',
-                'hs_call_body',
-                'hs_call_duration',
-                'hs_call_start_time',
-                'hs_call_end_time',
-                'hs_createdate',
-                'hs_lastmodifieddate'
-            ],
-            'quotes': [
-                'hs_title',
-                'hs_amount',
-                'hs_expiration_date',
-                'hs_status',
-                'hs_createdate',
-                'hs_lastmodifieddate'
-            ],
-            'line_items': [
-                'hs_product_id',
-                'hs_quantity',
-                'hs_cost',
-                'hs_price',
-                'hs_createdate',
-                'hs_lastmodifieddate'
-            ]
-        }
-        
-        # Always include date properties for filtering if not already present
-        base_properties = default_properties_map.get(self.name, [])
-        date_properties = ['hs_createdate', 'hs_lastmodifieddate']
-        
-        for prop in date_properties:
-            if prop not in base_properties:
-                base_properties.append(prop)
-        
-        return base_properties
+        """Get all available properties for each stream since POST method handles URI length issues."""
+        try:
+            # Get all available properties from the API
+            properties_hub = self.get_properties()
+            all_properties = [prop["name"] for prop in properties_hub]
+            
+            # Ensure date properties are included for filtering
+            date_properties = ['hs_createdate', 'hs_lastmodifieddate']
+            for prop in date_properties:
+                if prop not in all_properties:
+                    all_properties.append(prop)
+            
+            self.logger.info(
+                f"Stream '{self.name}': Using all {len(all_properties)} available properties "
+                f"since POST method support eliminates URI length concerns"
+            )
+            
+            return all_properties
+            
+        except Exception as e:
+            self.logger.warning(
+                f"Stream '{self.name}': Failed to get all properties from API: {e}. "
+                "Falling back to essential properties only."
+            )
+            
+            # Fallback to essential properties if API call fails
+            essential_properties_map = {
+                'deals': [
+                    'dealname', 'amount', 'dealstage', 'closedate', 'pipeline',
+                    'hs_is_closed', 'hs_is_closed_won', 'hs_is_closed_lost',
+                    'hs_deal_stage_probability', 'hs_createdate', 'hs_lastmodifieddate'
+                ],
+                'contacts': [
+                    'firstname', 'lastname', 'email', 'phone', 'company', 'jobtitle',
+                    'hs_createdate', 'hs_lastmodifieddate'
+                ],
+                'companies': [
+                    'name', 'domain', 'industry', 'city', 'state', 'country',
+                    'hs_createdate', 'hs_lastmodifieddate'
+                ],
+                'meetings': [
+                    'hs_timestamp', 'hs_meeting_title', 'hs_meeting_body',
+                    'hs_meeting_start_time', 'hs_meeting_end_time',
+                    'hs_createdate', 'hs_lastmodifieddate'
+                ],
+                'calls': [
+                    'hs_call_title', 'hs_call_body', 'hs_call_duration',
+                    'hs_call_start_time', 'hs_call_end_time',
+                    'hs_createdate', 'hs_lastmodifieddate'
+                ],
+                'quotes': [
+                    'hs_title', 'hs_amount', 'hs_expiration_date', 'hs_status',
+                    'hs_createdate', 'hs_lastmodifieddate'
+                ],
+                'line_items': [
+                    'hs_product_id', 'hs_quantity', 'hs_cost', 'hs_price',
+                    'hs_createdate', 'hs_lastmodifieddate'
+                ],
+                'notes': [
+                    'hs_note_body', 'hs_timestamp', 'hs_createdate', 'hs_lastmodifieddate'
+                ],
+                'tasks': [
+                    'hs_task_subject', 'hs_task_body', 'hs_task_status', 'hs_task_priority',
+                    'hs_task_completion_date', 'hs_createdate', 'hs_lastmodifieddate'
+                ],
+                'emails': [
+                    'hs_email_subject', 'hs_email_body', 'hs_email_direction', 'hs_email_status',
+                    'hs_createdate', 'hs_lastmodifieddate'
+                ]
+            }
+            
+            base_properties = essential_properties_map.get(self.name, [])
+            date_properties = ['hs_createdate', 'hs_lastmodifieddate']
+            
+            for prop in date_properties:
+                if prop not in base_properties:
+                    base_properties.append(prop)
+            
+            return base_properties
 
     def get_properties(self) -> List[dict]:
         response = requests.get(

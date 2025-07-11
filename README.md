@@ -5,10 +5,14 @@
 Built with the [Meltano Tap SDK](https://sdk.meltano.com) for Singer Taps.
 
 ## What the fork?
-### URI too long
-In my case Hubspot users created a lot of fields making hundreds of properties, and putting these all as parameters will cause an error.
-### start_date is ignored during fetching from Hubspot
-Every time I run my pipeline it still gets everything each time then filters them after, pretty much a waste for time and resources.
+### URI too long - SOLVED ✅
+In my case Hubspot users created a lot of fields making hundreds of properties, and putting these all as parameters will cause an error. **This has been solved by implementing POST method support that automatically switches from GET to POST when there are more than 50 properties, sending properties in the request body instead of URL parameters.**
+
+### start_date is ignored during fetching from Hubspot - SOLVED ✅
+Every time I run my pipeline it still gets everything each time then filters them after, pretty much a waste for time and resources. **This has been solved by implementing API-level date filtering using `hs_createdate` and `hs_lastmodifieddate` properties.**
+
+### Property Limits Removed - NEW ✅
+With POST method support, there are no longer any artificial limits on the number of properties that can be synced. The tap now automatically uses all available properties for each stream (e.g., 643 properties for deals, 524 for contacts, etc.) and efficiently handles them using POST requests when needed.
 
 ## Capabilities
 
@@ -18,6 +22,23 @@ Every time I run my pipeline it still gets everything each time then filters the
 * `about`
 * `stream-maps`
 * `schema-flattening`
+
+## Key Improvements
+
+### 🚀 POST Method Support
+- Automatically switches from GET to POST when there are more than 50 properties
+- Eliminates URI length limitations completely
+- Sends properties in request body instead of URL parameters
+
+### 📅 API-Level Date Filtering
+- Uses `hs_createdate` and `hs_lastmodifieddate` for efficient filtering
+- Filters at the API level instead of client-side
+- Respects `start_date` configuration properly
+
+### 🔥 Full Property Access
+- No artificial limits on property count
+- Automatically uses all available properties for each stream
+- Efficient handling of large property sets (e.g., 643 deal properties, 524 contact properties)
 
 ## Settings
 
@@ -134,8 +155,13 @@ This tap:
   - [Contacts](https://developers.hubspot.com/docs/methods/contacts/get_contacts)
   - [Contact Lists](http://developers.hubspot.com/docs/methods/lists/get_lists)
   - [Deals](http://developers.hubspot.com/docs/methods/deals/get_deals_modified)
+  - [Quotes](https://developers.hubspot.com/docs/api/crm/quotes)
+  - [Line Items](https://developers.hubspot.com/docs/api/crm/line-items)
   - [Meetings](https://developers.hubspot.com/docs/api/crm/meetings)
   - [Calls](https://developers.hubspot.com/docs/api/crm/calls)
+  - [Notes](https://developers.hubspot.com/docs/api/crm/notes)
+  - [Tasks](https://developers.hubspot.com/docs/api/crm/tasks)
+  - [Emails](https://developers.hubspot.com/docs/api/crm/emails)
   - [Deal Pipelines](https://developers.hubspot.com/docs/methods/deal-pipelines/get-all-deal-pipelines)
   - [Email Events](http://developers.hubspot.com/docs/methods/email/get_events)
   - [Forms](http://developers.hubspot.com/docs/methods/forms/v2/get_forms)
