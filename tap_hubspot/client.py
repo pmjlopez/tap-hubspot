@@ -75,6 +75,14 @@ class HubspotStream(RESTStream):
         else:
             next_page_token = response.headers.get("X-Next-Page", None)
 
+        # Add logging to help debug pagination issues
+        if next_page_token:
+            self.logger.debug(
+                f"Stream '{self.name}': Next page token: {next_page_token[:20]}{'...' if len(str(next_page_token)) > 20 else ''}"
+            )
+        else:
+            self.logger.debug(f"Stream '{self.name}': No more pages available")
+
         return next_page_token
 
     def get_url_params(
@@ -83,28 +91,15 @@ class HubspotStream(RESTStream):
         """Return a dictionary of values to be used in URL parameterization."""
         params: dict = {}
         
-        # If using POST method, don't include properties in URL params
-        if self._should_use_post_method():
-            # Only include basic pagination and filtering in URL for POST
-            if next_page_token:
-                params["after"] = next_page_token
-            
-            # Add date filtering if this is an incremental stream with a start_date
-            if self.replication_method == "INCREMENTAL" and self.replication_key:
-                date_filter = self._get_date_filter_params()
-                if date_filter:
-                    params.update(date_filter)
-        else:
-            # For GET method, include everything in URL params
-            if next_page_token:
-                params["after"] = next_page_token
-            params["limit"] = 100
-            
-            # Add date filtering if this is an incremental stream with a start_date
-            if self.replication_method == "INCREMENTAL" and self.replication_key:
-                date_filter = self._get_date_filter_params()
-                if date_filter:
-                    params.update(date_filter)
+        # For search endpoints, only include basic pagination and filtering in URL
+        if next_page_token:
+            params["after"] = next_page_token
+        
+        # Add date filtering if this is an incremental stream with a start_date
+        if self.replication_method == "INCREMENTAL" and self.replication_key:
+            date_filter = self._get_date_filter_params()
+            if date_filter:
+                params.update(date_filter)
         
         return params
     
@@ -113,6 +108,7 @@ class HubspotStream(RESTStream):
         try:
             start_date = self.config.get("start_date")
             if not start_date:
+                self.logger.debug(f"Stream '{self.name}': No start_date configured, skipping date filtering")
                 return None
             
             # Convert start_date to timestamp for API filtering
@@ -225,65 +221,50 @@ class HubspotStream(RESTStream):
     def prepare_request_payload(
         self, context: Optional[dict], next_page_token: Optional[Any]
     ) -> Optional[dict]:
-        """Prepare the data payload for the REST API request.
-
-        For HubSpot CRM v3 API, we can use POST to handle large numbers of properties
-        by sending them in the request body instead of URL parameters.
-        """
-        # Check if we should use POST method (when there are many properties)
-        if self._should_use_post_method():
-            selected_properties = self.get_selected_properties()
-            
-            payload = {
-                "properties": selected_properties,
-                "limit": 100
-            }
-            
-            # Add date filtering if applicable
-            if self.replication_method == "INCREMENTAL" and self.replication_key:
-                date_filter = self._get_date_filter_params()
-                if date_filter:
-                    # Convert filter string to HubSpot's POST format
-                    filter_str = date_filter["filter"]
-                    payload["filter"] = filter_str
-            
-            # Add pagination if needed
-            if next_page_token:
-                payload["after"] = next_page_token
-            
-            # Add archived status if available
-            if context and "archived" in context:
-                payload["archived"] = context["archived"]
-            
-            # Add associations if this stream uses them
-            if hasattr(self, 'path') and 'objects' in self.path:
-                payload["associations"] = HUBSPOT_OBJECTS
-            
-            self.logger.info(
-                f"Stream '{self.name}': Using POST method with {len(selected_properties)} properties "
-                f"to handle large property set efficiently"
-            )
-            
-            return payload
-        
-        return None
-    
-    def _should_use_post_method(self) -> bool:
-        """Determine if we should use POST method instead of GET."""
-        # Use POST if we have more than 50 properties for efficient handling
+        """Prepare the data payload for the search API request."""
         selected_properties = self.get_selected_properties()
-        return len(selected_properties) > 50
-    
+        
+        payload = {
+            "properties": selected_properties,
+            "limit": 100
+        }
+        
+        # Add date filtering if applicable
+        if self.replication_method == "INCREMENTAL" and self.replication_key:
+            date_filter = self._get_date_filter_params()
+            if date_filter:
+                # Convert filter string to HubSpot's search format
+                filter_str = date_filter["filter"]
+                payload["filter"] = filter_str
+        
+        # Add pagination if needed
+        if next_page_token:
+            payload["after"] = next_page_token
+        
+        # Add archived status if available
+        if context and "archived" in context:
+            payload["archived"] = context["archived"]
+        
+        # Add associations if this stream uses them
+        if hasattr(self, 'path') and 'objects' in self.path:
+            payload["associations"] = HUBSPOT_OBJECTS
+        
+        self.logger.info(
+            f"Stream '{self.name}': Using search endpoint with {len(selected_properties)} properties"
+        )
+        
+        return payload
+
     @property
     def http_method(self) -> str:
-        """Return the HTTP method to use for this stream."""
-        if self._should_use_post_method():
-            return "POST"
-        return "GET"
+        """All streams now use POST with search endpoints."""
+        return "POST"
 
     def parse_response(self, response: requests.Response) -> Iterable[dict]:
         """Parse the response and return an iterator of result rows."""
-        yield from extract_jsonpath(self.records_jsonpath, input=response.json())
+        records = list(extract_jsonpath(self.records_jsonpath, input=response.json()))
+        self.logger.debug(f"Stream '{self.name}': Processing {len(records)} records from current page")
+        yield from records
 
     def get_json_schema(self, from_type: str) -> dict:
         """Return the JSON Schema dict that describes the sql type.
@@ -515,12 +496,6 @@ class HubspotStream(RESTStream):
                 f"continuing gracefully with no dynamic properties: {e}, {data}"
             )
             return []
-
-    def get_params_from_properties(self, properties: List[dict]) -> List[str]:
-        params = []
-        for prop in properties:
-            params.append(prop["name"])
-        return params
 
     def request_decorator(self, func: Callable) -> Callable:
         """Instantiate a decorator for handling request failures.

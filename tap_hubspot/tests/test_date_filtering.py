@@ -90,7 +90,7 @@ class TestDateFiltering:
         assert filter_params is None
 
     def test_get_url_params_includes_date_filter(self):
-        """Test that get_url_params includes date filtering for incremental streams."""
+        """Test that get_url_params includes basic params for POST requests."""
         config = {
             "access_token": "test_token",
             "start_date": "2023-01-01T00:00:00Z"
@@ -109,12 +109,15 @@ class TestDateFiltering:
         stream.replication_method = "INCREMENTAL"
         stream.replication_key = "updatedAt"
         
-        # Test the URL params method
+        # Test the URL params method - should only include basic params for POST
         params = stream.get_url_params(context={"archived": False}, next_page_token=None)
         
-        assert "limit" in params
+        # For POST requests, URL params should be minimal
+        assert "archived" in params
+        # Date filtering is still present in params for compatibility
         assert "filter" in params
         assert "hs_createdate>=" in params["filter"]
+        assert "hs_lastmodifieddate>=" in params["filter"]
 
     def test_get_url_params_no_date_filter_for_full_table(self):
         """Test that get_url_params doesn't include date filtering for full table streams."""
@@ -139,8 +142,41 @@ class TestDateFiltering:
         # Test the URL params method
         params = stream.get_url_params(context={"archived": False}, next_page_token=None)
         
-        assert "limit" in params
+        # For POST requests, URL params should be minimal
+        assert "archived" in params
         assert "filter" not in params
+
+    def test_prepare_request_payload_includes_date_filter(self):
+        """Test that prepare_request_payload includes date filtering for incremental streams."""
+        config = {
+            "access_token": "test_token",
+            "start_date": "2023-01-01T00:00:00Z"
+        }
+        
+        # Create a properly mocked tap
+        mock_tap = Mock()
+        mock_tap.config = config
+        mock_tap.logger = Mock()
+        mock_tap.name = "tap-hubspot"
+        
+        # Create a stream instance
+        stream = ContactsStream(tap=mock_tap)
+        stream.name = "contacts"
+        stream.logger = Mock()
+        stream.replication_method = "INCREMENTAL"
+        stream.replication_key = "updatedAt"
+        
+        # Test the payload method
+        payload = stream.prepare_request_payload(context={"archived": False}, next_page_token=None)
+        
+        assert payload is not None
+        assert "filter" in payload
+        assert "hs_createdate>=" in payload["filter"]
+        assert "hs_lastmodifieddate>=" in payload["filter"]
+        assert "archived" in payload
+        assert "limit" in payload
+        assert "properties" in payload
+        assert "associations" in payload
 
     def test_ensure_date_properties_included(self):
         """Test that date properties are always included in selected properties."""

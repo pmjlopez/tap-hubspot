@@ -14,17 +14,14 @@ utc = pytz.UTC
 
 class MeetingsStream(HubspotStream):
     name = "meetings"
-    path = "/crm/v3/objects/meetings"
+    path = "/crm/v3/objects/meetings/search"  # Use search endpoint for POST support
     primary_keys = ["id"]
 
     def get_url_params(
         self, context: Optional[dict], next_page_token: Optional[Any]
     ) -> Dict[str, Any]:
         params = super().get_url_params(context, next_page_token)
-        # Only add properties to URL if using GET method
-        if not self._should_use_post_method():
-            selected_properties = self.get_selected_properties()
-            params["properties"] = ",".join(selected_properties)
+        # Search endpoint doesn't use URL params for properties, they go in the body
         return params
 
     @property
@@ -36,17 +33,16 @@ class MeetingsStream(HubspotStream):
 
 class CallsStream(HubspotStream):
     name = "calls"
-    path = "/crm/v3/objects/calls"
+    path = "/crm/v3/objects/calls/search"  # Use search endpoint for POST support
     primary_keys = ["id"]
+    partitions = [{"archived": True}, {"archived": False}]
 
     def get_url_params(
         self, context: Optional[dict], next_page_token: Optional[Any]
     ) -> Dict[str, Any]:
         params = super().get_url_params(context, next_page_token)
-        # Only add properties to URL if using GET method
-        if not self._should_use_post_method():
-            selected_properties = self.get_selected_properties()
-            params["properties"] = ",".join(selected_properties)
+        # Search endpoint doesn't use URL params for properties, they go in the body
+        params["archived"] = context["archived"]
         return params
 
     @property
@@ -54,6 +50,10 @@ class CallsStream(HubspotStream):
         if self.cached_schema is None:
             self.cached_schema, self.properties = self.get_custom_schema()
         return self.cached_schema
+
+    def get_child_context(self, record: dict, context: Optional[dict]) -> dict:
+        """Return a context dictionary for child streams."""
+        return {"archived": record["archived"], "call_id": record["id"]}
 
 
 class OwnersStream(HubspotStream):
@@ -75,21 +75,16 @@ class CompaniesStream(HubspotStream):
     """Define custom stream."""
 
     name = "companies"
-    path = "/crm/v3/objects/companies"
+    path = "/crm/v3/objects/companies/search"  # Use search endpoint for POST support
     primary_keys = ["id"]
     partitions = [{"archived": True}, {"archived": False}]
-
 
     def get_url_params(
         self, context: Optional[dict], next_page_token: Optional[Any]
     ) -> Dict[str, Any]:
         params = super().get_url_params(context, next_page_token)
-        # Only add properties to URL if using GET method
-        if not self._should_use_post_method():
-            selected_properties = self.get_selected_properties()
-            params["properties"] = ",".join(selected_properties)
+        # Search endpoint doesn't use URL params for properties, they go in the body
         params["archived"] = context["archived"]
-        params["associations"] = ",".join(HUBSPOT_OBJECTS)
         return params
 
     @property
@@ -106,27 +101,16 @@ class CompaniesStream(HubspotStream):
 class DealsStream(HubspotStream):
     """Define custom stream."""
     name = "deals"
-    path = "/crm/v3/objects/deals"
+    path = "/crm/v3/objects/deals/search"  # Use search endpoint for POST support
     primary_keys = ["id"]
     partitions = [{"archived": True}, {"archived": False}]
 
     def get_url_params(
         self, context: Optional[dict], next_page_token: Optional[Any]
     ) -> Dict[str, Any]:
-        # Get selected properties from Meltano configuration
-        selected_properties = self.get_selected_properties()
-        
-        self.logger.info(
-            f"Deals stream: Using {len(selected_properties)} selected properties "
-            f"from Meltano configuration"
-        )
-        
         params = super().get_url_params(context, next_page_token)
-        # Only add properties to URL if using GET method
-        if not self._should_use_post_method():
-            params["properties"] = ",".join(selected_properties)
+        # Search endpoint doesn't use URL params for properties, they go in the body
         params["archived"] = context["archived"]
-        params["associations"] = ",".join(HUBSPOT_OBJECTS)
         return params
 
     @property
@@ -147,7 +131,7 @@ class ContactsStream(HubspotStream):
     """Define custom stream."""
 
     name = "contacts"
-    path = "/crm/v3/objects/contacts"
+    path = "/crm/v3/objects/contacts/search"  # Use search endpoint for POST support
     primary_keys = ["id"]
     partitions = [{"archived": True}, {"archived": False}]
 
@@ -155,12 +139,8 @@ class ContactsStream(HubspotStream):
         self, context: Optional[dict], next_page_token: Optional[Any]
     ) -> Dict[str, Any]:
         params = super().get_url_params(context, next_page_token)
-        # Only add properties to URL if using GET method
-        if not self._should_use_post_method():
-            selected_properties = self.get_selected_properties()
-            params["properties"] = ",".join(selected_properties)
+        # Search endpoint doesn't use URL params for properties, they go in the body
         params["archived"] = context["archived"]
-        params["associations"] = ",".join(HUBSPOT_OBJECTS)
         return params
 
     @property
@@ -399,7 +379,7 @@ class AssociationsCompaniesToDealsStream(HubspotStream):
 
 class QuotesStream(HubspotStream):
     name = "quotes"
-    path = "/crm/v3/objects/quotes"
+    path = "/crm/v3/objects/quotes/search"  # Use search endpoint for POST support
     primary_keys = ["id"]
     partitions = [{"archived": True}, {"archived": False}]
 
@@ -407,12 +387,8 @@ class QuotesStream(HubspotStream):
         self, context: Optional[dict], next_page_token: Optional[Any]
     ) -> Dict[str, Any]:
         params = super().get_url_params(context, next_page_token)
-        # Only add properties to URL if using GET method
-        if not self._should_use_post_method():
-            selected_properties = self.get_selected_properties()
-            params["properties"] = ",".join(selected_properties)
+        # Search endpoint doesn't use URL params for properties, they go in the body
         params["archived"] = context["archived"]
-        params["associations"] = ",".join(HUBSPOT_OBJECTS)
         return params
 
     @property
@@ -423,7 +399,7 @@ class QuotesStream(HubspotStream):
 
 class LineItemsStream(HubspotStream):
     name = "line_items"
-    path = "/crm/v3/objects/line_items"
+    path = "/crm/v3/objects/line_items/search"  # Use search endpoint for POST support
     primary_keys = ["id"]
     partitions = [{"archived": True}, {"archived": False}]
 
@@ -431,12 +407,8 @@ class LineItemsStream(HubspotStream):
         self, context: Optional[dict], next_page_token: Optional[Any]
     ) -> Dict[str, Any]:
         params = super().get_url_params(context, next_page_token)
-        # Only add properties to URL if using GET method
-        if not self._should_use_post_method():
-            selected_properties = self.get_selected_properties()
-            params["properties"] = ",".join(selected_properties)
+        # Search endpoint doesn't use URL params for properties, they go in the body
         params["archived"] = context["archived"]
-        params["associations"] = ",".join(HUBSPOT_OBJECTS)
         return params
 
     @property
@@ -448,7 +420,7 @@ class LineItemsStream(HubspotStream):
 
 class NotesStream(HubspotStream):
     name = "notes"
-    path = "/crm/v3/objects/notes"
+    path = "/crm/v3/objects/notes/search"  # Use search endpoint for POST support
     primary_keys = ["id"]
     partitions = [{"archived": True}, {"archived": False}]
 
@@ -456,12 +428,8 @@ class NotesStream(HubspotStream):
         self, context: Optional[dict], next_page_token: Optional[Any]
     ) -> Dict[str, Any]:
         params = super().get_url_params(context, next_page_token)
-        # Only add properties to URL if using GET method
-        if not self._should_use_post_method():
-            selected_properties = self.get_selected_properties()
-            params["properties"] = ",".join(selected_properties)
+        # Search endpoint doesn't use URL params for properties, they go in the body
         params["archived"] = context["archived"]
-        params["associations"] = ",".join(HUBSPOT_OBJECTS)
         return params
 
     @property
@@ -473,7 +441,7 @@ class NotesStream(HubspotStream):
 
 class TasksStream(HubspotStream):
     name = "tasks"
-    path = "/crm/v3/objects/tasks"
+    path = "/crm/v3/objects/tasks/search"  # Use search endpoint for POST support
     primary_keys = ["id"]
     partitions = [{"archived": True}, {"archived": False}]
 
@@ -481,12 +449,8 @@ class TasksStream(HubspotStream):
         self, context: Optional[dict], next_page_token: Optional[Any]
     ) -> Dict[str, Any]:
         params = super().get_url_params(context, next_page_token)
-        # Only add properties to URL if using GET method
-        if not self._should_use_post_method():
-            selected_properties = self.get_selected_properties()
-            params["properties"] = ",".join(selected_properties)
+        # Search endpoint doesn't use URL params for properties, they go in the body
         params["archived"] = context["archived"]
-        params["associations"] = ",".join(HUBSPOT_OBJECTS)
         return params
 
     @property
@@ -498,7 +462,7 @@ class TasksStream(HubspotStream):
 
 class EmailsStream(HubspotStream):
     name = "emails"
-    path = "/crm/v3/objects/emails"
+    path = "/crm/v3/objects/emails/search"  # Use search endpoint for POST support
     primary_keys = ["id"]
     partitions = [{"archived": True}, {"archived": False}]
 
@@ -506,12 +470,8 @@ class EmailsStream(HubspotStream):
         self, context: Optional[dict], next_page_token: Optional[Any]
     ) -> Dict[str, Any]:
         params = super().get_url_params(context, next_page_token)
-        # Only add properties to URL if using GET method
-        if not self._should_use_post_method():
-            selected_properties = self.get_selected_properties()
-            params["properties"] = ",".join(selected_properties)
+        # Search endpoint doesn't use URL params for properties, they go in the body
         params["archived"] = context["archived"]
-        params["associations"] = ",".join(HUBSPOT_OBJECTS)
         return params
 
     @property

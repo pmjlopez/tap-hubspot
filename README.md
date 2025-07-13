@@ -1,260 +1,219 @@
 # tap-hubspot
 
-`tap-hubspot` is a Singer tap for Hubspot.
+`tap-hubspot` is a Singer tap for HubSpot, built with the [Meltano Tap SDK](https://sdk.meltano.com) for Singer Taps.
 
-Built with the [Meltano Tap SDK](https://sdk.meltano.com) for Singer Taps.
+## 🚀 This Fork: Enhanced HubSpot Integration
 
-## What the fork?
-### URI too long - SOLVED ✅
-In my case Hubspot users created a lot of fields making hundreds of properties, and putting these all as parameters will cause an error. **This has been solved by implementing POST method support that automatically switches from GET to POST when there are more than 50 properties, sending properties in the request body instead of URL parameters.**
+This is a **fork of the original tap-hubspot** that addresses critical limitations in the original implementation, specifically designed for organizations with large HubSpot instances that have hundreds of custom properties.
 
-### start_date is ignored during fetching from Hubspot - SOLVED ✅
-Every time I run my pipeline it still gets everything each time then filters them after, pretty much a waste for time and resources. **This has been solved by implementing API-level date filtering using `hs_createdate` and `hs_lastmodifieddate` properties.**
+### Why This Fork Was Created
 
-### Property Limits Removed - NEW ✅
-With POST method support, there are no longer any artificial limits on the number of properties that can be synced. The tap now automatically uses all available properties for each stream (e.g., 643 properties for deals, 524 for contacts, etc.) and efficiently handles them using POST requests when needed.
+The original tap-hubspot has several limitations that become problematic for enterprise HubSpot instances:
 
-## Capabilities
+1. **URI Length Limitations**: When HubSpot instances have hundreds of custom properties, the original tap fails with "URI too long" errors
+2. **Inefficient Date Filtering**: The original tap fetches all data and filters client-side, wasting time and resources
+3. **Property Count Restrictions**: Artificial limits prevent accessing all available properties
 
-* `catalog`
-* `state`
-* `discover`
-* `about`
-* `stream-maps`
-* `schema-flattening`
+### Key Differentiators from Original
 
-## Key Improvements
+| Feature | Original tap-hubspot | This Fork |
+|---------|---------------------|-----------|
+| **Property Handling** | GET requests with URL parameters | POST requests with search endpoints |
+| **URI Length** | Fails with 50+ properties | Handles 600+ properties efficiently |
+| **Date Filtering** | Client-side filtering | API-level filtering |
+| **Property Limits** | Limited property selection | All properties available |
+| **Performance** | Inefficient for large datasets | Optimized for enterprise scale |
 
-### 🚀 POST Method Support
-- Automatically switches from GET to POST when there are more than 50 properties
+## ✅ Problems Solved
+
+### 1. URI Too Long - SOLVED ✅
+**Problem**: HubSpot instances with hundreds of custom properties cause "URI too long" errors when using GET requests.
+
+**Solution**: Implemented search endpoint pattern that uses POST requests for all streams, sending properties in the request body instead of URL parameters.
+
+### 2. Inefficient Date Filtering - SOLVED ✅
+**Problem**: Original tap fetches all data and filters client-side, wasting time and resources.
+
+**Solution**: Implemented API-level date filtering using `hs_createdate` and `hs_lastmodifieddate` properties, filtering at the API level instead of client-side.
+
+### 3. Property Count Limitations - SOLVED ✅
+**Problem**: Artificial limits on the number of properties that can be synced.
+
+**Solution**: Removed all property count restrictions. The tap now automatically uses all available properties for each stream and efficiently handles them using POST requests.
+
+## 🔧 Technical Improvements
+
+### 🚀 Search Endpoint Pattern
+- All CRM object streams now use `/search` endpoints
+- Automatic POST method for efficient property handling
 - Eliminates URI length limitations completely
-- Sends properties in request body instead of URL parameters
+- Consistent pattern across all streams
 
 ### 📅 API-Level Date Filtering
 - Uses `hs_createdate` and `hs_lastmodifieddate` for efficient filtering
 - Filters at the API level instead of client-side
 - Respects `start_date` configuration properly
+- Reduces data transfer and processing time
 
 ### 🔥 Full Property Access
 - No artificial limits on property count
 - Automatically uses all available properties for each stream
-- Efficient handling of large property sets (e.g., 643 deal properties, 524 contact properties)
+- Efficient handling of large property sets (600+ properties per stream)
+- Maintains backward compatibility with property selection
 
-## Settings
+### 🏗️ Enhanced Architecture
+- Updated base `HubspotStream` class with improved logic
+- Search endpoint support for all major CRM objects
+- Better error handling and logging
+- Improved pagination and state management
 
-| Setting             | Required | Default | Description |
-|:--------------------|:--------:|:-------:|:------------|
-| access_token        | True     | None    | PRIVATE Access Token for Hubspot API (TODO: Add public option) |
-| start_date          | True     | None    | The earliest record date to sync |
-| stream_maps         | False    | None    | Config object for stream maps capability. |
-| stream_map_config   | False    | None    | User-defined config values to be used within map expressions. |
-| flattening_enabled  | False    | None    | 'True' to enable schema flattening and automatically expand nested properties. |
-| flattening_max_depth| False    | None    | The max depth to flatten schemas. |
+## 📊 Supported Streams
 
-A full list of supported settings and capabilities is available by running: `tap-hubspot --about`
+All major HubSpot CRM objects now use the optimized search endpoint pattern:
 
-## Configuring Properties in Meltano
+- **Companies** - `/crm/v3/objects/companies/search`
+- **Contacts** - `/crm/v3/objects/contacts/search`
+- **Deals** - `/crm/v3/objects/deals/search`
+- **Calls** - `/crm/v3/objects/calls/search`
+- **Meetings** - `/crm/v3/objects/meetings/search`
+- **Quotes** - `/crm/v3/objects/quotes/search`
+- **Line Items** - `/crm/v3/objects/line_items/search`
+- **Notes** - `/crm/v3/objects/notes/search`
+- **Tasks** - `/crm/v3/objects/tasks/search`
+- **Emails** - `/crm/v3/objects/emails/search`
 
-When using this tap with Meltano, you can control which properties are synced for each object type using Meltano's `select` and `metadata` configuration. This allows you to limit the data being extracted to only the properties you need.
+## 🚀 Performance Benefits
 
-### Example: Limiting Contact Properties
+- **Eliminates URI Length Errors**: POST method handles unlimited properties
+- **Faster Data Extraction**: API-level filtering reduces data transfer
+- **Better Resource Utilization**: Efficient pagination and state management
+- **Enterprise Scale Ready**: Handles large HubSpot instances with hundreds of properties
 
-To sync only specific contact properties, update your `meltano.yml`:
+## 📋 Configuration
 
-```yaml
-plugins:
-  extractors:
-  - name: tap-hubspot
-    namespace: tap_hubspot
-    pip_url: -e .
-    capabilities:
-    - state
-    - catalog
-    - discover
-    settings:
-    - name: access_token
-      kind: password
-    - name: start_date
-      value: '2010-01-01T00:00:00Z'
-    config:
-      start_date: '2010-01-01T00:00:00Z'
-    select:
-      # Select only specific contact properties
-      - contacts.properties.firstname
-      - contacts.properties.lastname
-      - contacts.properties.email
-      - contacts.properties.phone
-      # Select all deal properties
-      - deals.*
-      # Select all quote properties
-      - quotes.*
+### Basic Configuration
+
+```json
+{
+  "access_token": "your-hubspot-access-token",
+  "start_date": "2020-01-01T00:00:00Z"
+}
 ```
 
-### Example: Limiting Multiple Object Types
-
-```yaml
-plugins:
-  extractors:
-  - name: tap-hubspot
-    namespace: tap_hubspot
-    pip_url: -e .
-    capabilities:
-    - state
-    - catalog
-    - discover
-    settings:
-    - name: access_token
-      kind: password
-    - name: start_date
-      value: '2010-01-01T00:00:00Z'
-    config:
-      start_date: '2010-01-01T00:00:00Z'
-    select:
-      # Contact properties
-      - contacts.properties.firstname
-      - contacts.properties.lastname
-      - contacts.properties.email
-      - contacts.properties.company
-      # Company properties
-      - companies.properties.name
-      - companies.properties.domain
-      - companies.properties.industry
-      # Deal properties
-      - deals.properties.dealname
-      - deals.properties.amount
-      - deals.properties.dealstage
-      - deals.properties.closedate
-```
-
-### Property Selection Patterns
-
-- `contacts.properties.*` - All contact properties
-- `contacts.properties.firstname` - Specific contact property
-- `deals.*` - All deal data (including properties, associations, etc.)
-- `companies.properties.name` - Specific company property
-
-### Discovering Available Properties
-
-To see all available properties for each object type, run:
+### Environment Variables
 
 ```bash
-meltano invoke tap-hubspot --discover
+export TAP_HUBSPOT_ACCESS_TOKEN="your-access-token"
+export TAP_HUBSPOT_START_DATE="2020-01-01T00:00:00Z"
 ```
 
-This will show you the complete schema including all available properties that you can select.
+## 🔧 Installation
 
-# Setup
-
-This is a [Singer](https://singer.io) tap that produces JSON-formatted data following the [Singer spec](https://github.com/singer-io/getting-started/blob/master/SPEC.md).
-
-This tap:
-- Pulls raw data from HubSpot's [REST API](http://developers.hubspot.com/docs/overview)
-- Extracts the following resources from HubSpot
-  - [Campaigns](http://developers.hubspot.com/docs/methods/email/get_campaign_data)
-  - [Companies](http://developers.hubspot.com/docs/methods/companies/get_company)
-  - [Contacts](https://developers.hubspot.com/docs/methods/contacts/get_contacts)
-  - [Contact Lists](http://developers.hubspot.com/docs/methods/lists/get_lists)
-  - [Deals](http://developers.hubspot.com/docs/methods/deals/get_deals_modified)
-  - [Quotes](https://developers.hubspot.com/docs/api/crm/quotes)
-  - [Line Items](https://developers.hubspot.com/docs/api/crm/line-items)
-  - [Meetings](https://developers.hubspot.com/docs/api/crm/meetings)
-  - [Calls](https://developers.hubspot.com/docs/api/crm/calls)
-  - [Notes](https://developers.hubspot.com/docs/api/crm/notes)
-  - [Tasks](https://developers.hubspot.com/docs/api/crm/tasks)
-  - [Emails](https://developers.hubspot.com/docs/api/crm/emails)
-  - [Deal Pipelines](https://developers.hubspot.com/docs/methods/deal-pipelines/get-all-deal-pipelines)
-  - [Email Events](http://developers.hubspot.com/docs/methods/email/get_events)
-  - [Forms](http://developers.hubspot.com/docs/methods/forms/v2/get_forms)
-  - [Keywords](http://developers.hubspot.com/docs/methods/keywords/get_keywords)
-  - [Owners](http://developers.hubspot.com/docs/methods/owners/get_owners)
-  - [Subscription Changes](http://developers.hubspot.com/docs/methods/email/get_subscriptions_timeline)
-  - [Workflows](http://developers.hubspot.com/docs/methods/workflows/v3/get_workflows)
-- Outputs the schema for each resource
-- Incrementally pulls data based on the input state
-
-## Configuration
-
-This tap requires a `config.json` which specifies details regarding [OAuth 2.0](https://developers.hubspot.com/docs/methods/oauth2/oauth2-overview) authentication, a cutoff date for syncing historical data, and an optional flag which controls collection of anonymous usage metrics. See [config.sample.json](config.sample.json) for an example. You may specify an API key instead of OAuth parameters for development purposes, as detailed below.
-
-To run `tap-hubspot` with the configuration file, use this command:
+### Using Poetry (Recommended)
 
 ```bash
-› tap-hubspot -c my-config.json
-```
-
-
-## API Key Authentication (for development)
-
-As an alternative to OAuth 2.0 authentication during development, you may specify an API key (`HAPIKEY`) to authenticate with the HubSpot API. This should be used only for low-volume development work, as the [HubSpot API Usage Guidelines](https://developers.hubspot.com/apps/api_guidelines) specify that integrations should use OAuth for authentication.
-
-To use an API key, include a `hapikey` configuration variable in your `config.json` and set it to the value of your HubSpot API key. Any OAuth authentication parameters in your `config.json` **will be ignored** if this key is present!
-
----
-
-Copyright &copy; 2017 Stitch
-
-## Usage
-
-You can easily run `tap-hubspot` by itself or in a pipeline using [Meltano](https://meltano.com/).
-
-### Executing the Tap Directly
-
-```bash
-tap-hubspot --version
-tap-hubspot --help
-tap-hubspot --config CONFIG --discover > ./catalog.json
-```
-
-### Initialize your Development Environment
-
-```bash
-pipx install poetry
+# Install dependencies
 poetry install
+
+# Run the tap
+poetry run tap-hubspot --config config.json --discover
 ```
 
-### Create and Run Tests
+### Using pip
 
-Create tests within the `tap_hubspot/tests` subfolder and
-  then run:
+```bash
+# Install the package
+pip install -e .
+
+# Run the tap
+tap-hubspot --config config.json --discover
+```
+
+## 🧪 Testing
+
+### Run Tests
 
 ```bash
 poetry run pytest
 ```
 
-You can also test the `tap-hubspot` CLI interface directly using `poetry run`:
-
-```bash
-poetry run tap-hubspot --help
-```
-
-### Testing with [Meltano](https://www.meltano.com)
-
-_**Note:** This tap will work in any Singer environment and does not require Meltano.
-Examples here are for convenience and to streamline end-to-end orchestration scenarios._
-
-Your project comes with a custom `meltano.yml` project file already created. Open the `meltano.yml` and follow any _"TODO"_ items listed in
-the file.
-
-Next, install Meltano (if you haven't already) and any needed plugins:
+### Test with Meltano
 
 ```bash
 # Install meltano
 pipx install meltano
-# Initialize meltano within this directory
-cd tap-hubspot
+
+# Initialize project
 meltano install
+
+# Test the tap
+meltano invoke tap-hubspot --discover
 ```
 
-Now you can test and orchestrate using Meltano:
+## 📈 Usage Examples
+
+### Discover Schema
 
 ```bash
-# Test invocation:
-meltano invoke tap-hubspot --version
-# OR run a test `elt` pipeline:
+tap-hubspot --config config.json --discover > catalog.json
+```
+
+### Extract Data
+
+```bash
+tap-hubspot --config config.json --catalog catalog.json
+```
+
+### With Meltano
+
+```bash
 meltano elt tap-hubspot target-jsonl
 ```
 
-### SDK Dev Guide
+## 🔍 Property Selection
 
-See the [dev guide](https://sdk.meltano.com/en/latest/dev_guide.html) for more instructions on how to use the SDK to
-develop your own taps and targets.
+You can still control which properties are synced using Meltano's select configuration:
+
+```yaml
+select:
+  # Select specific properties
+  - contacts.properties.firstname
+  - contacts.properties.lastname
+  - contacts.properties.email
+  
+  # Select all properties for a stream
+  - deals.*
+  - companies.*
+```
+
+## 🤝 Contributing
+
+This fork maintains compatibility with the original tap-hubspot while adding enterprise-scale improvements. Contributions are welcome!
+
+### Development Setup
+
+```bash
+# Clone the repository
+git clone <repository-url>
+cd tap-hubspot
+
+# Install dependencies
+poetry install
+
+# Run tests
+poetry run pytest
+```
+
+## 📄 License
+
+This project is licensed under the same terms as the original tap-hubspot.
+
+## 🙏 Acknowledgments
+
+- Original tap-hubspot maintainers for the foundation
+- HubSpot API team for the comprehensive search endpoints
+- Meltano team for the excellent SDK
+
+---
+
+**Note**: This fork is specifically designed for enterprise HubSpot instances with large numbers of custom properties. For smaller instances, the original tap-hubspot may be sufficient.
