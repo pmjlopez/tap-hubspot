@@ -111,26 +111,38 @@ class HubspotStream(RESTStream):
                 self.logger.debug(f"Stream '{self.name}': No start_date configured, skipping date filtering")
                 return None
             
-            # Convert start_date to timestamp for API filtering
+            # Ensure start_date is in ISO 8601 format
             if isinstance(start_date, str):
                 from singer_sdk._singerlib.utils import strptime_to_utc
                 start_timestamp = strptime_to_utc(start_date)
+                # Convert back to ISO 8601 string
+                start_date_iso = start_timestamp.strftime("%Y-%m-%dT%H:%M:%SZ")
             else:
-                start_timestamp = start_date
+                start_date_iso = start_date.strftime("%Y-%m-%dT%H:%M:%SZ")
             
-            # Convert to milliseconds timestamp for HubSpot API
-            start_ms = int(start_timestamp.timestamp() * 1000)
-            
-            # HubSpot CRM v3 API supports filtering by hs_createdate and hs_lastmodifieddate
+            # HubSpot Search API expects filterGroups format
             # We'll filter for records that were either created OR modified after the start_date
-            # This ensures we don't miss records that were created before but modified after start_date
             filter_params = {
-                "filter": f"(hs_createdate>={start_ms} OR hs_lastmodifieddate>={start_ms})"
+                "filterGroups": [
+                    {
+                        "filters": [
+                            {
+                                "propertyName": "hs_createdate",
+                                "operator": "GTE",
+                                "value": start_date_iso
+                            },
+                            {
+                                "propertyName": "hs_lastmodifieddate",
+                                "operator": "GTE",
+                                "value": start_date_iso
+                            }
+                        ]
+                    }
+                ]
             }
             
             self.logger.info(
-                f"Stream '{self.name}': Adding date filter for records created or modified after {start_date} "
-                f"(timestamp: {start_ms})"
+                f"Stream '{self.name}': Adding date filter for records created or modified after {start_date_iso}"
             )
             
             return filter_params
@@ -233,9 +245,8 @@ class HubspotStream(RESTStream):
         if self.replication_method == "INCREMENTAL" and self.replication_key:
             date_filter = self._get_date_filter_params()
             if date_filter:
-                # Convert filter string to HubSpot's search format
-                filter_str = date_filter["filter"]
-                payload["filter"] = filter_str
+                # Add filterGroups to payload
+                payload.update(date_filter)
         
         # Add pagination if needed
         if next_page_token:
