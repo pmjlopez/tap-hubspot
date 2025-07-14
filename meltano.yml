@@ -13,12 +13,40 @@ plugins:
     - state
     - catalog
     - discover
+    config:
+      access_token: $TAP_HUBSPOT_ACCESS_TOKEN
+      start_date: "2020-01-01T00:00:00Z"
+      selected_properties:
+        contacts: ["*"]
+        companies: ["*"]
+        deals: ["*"]
+        calls: ["*"]
+        meetings: ["*"]
+        notes: ["*"]
+        tasks: ["*"]
+        quotes: ["*"]
+        line_items: ["*"]
+        owners: ["*"]
+        associations_companies_contacts: ["*"]
+        associations_companies_deals: ["*"]
+        associations_contacts_companies: ["*"]
+        associations_contacts_deals: ["*"]
+        associations_deals_companies: ["*"]
+        associations_deals_contacts: ["*"]
+        properties_companies: ["*"]
+        properties_contacts: ["*"]
+        properties_deals: ["*"]
+        properties_meetings: ["*"]
     settings:
     - name: access_token
       kind: password
+    - name: start_date
+      value: "2020-01-01T00:00:00Z"
     - name: flattening_enabled
       kind: boolean
+      value: false
     - name: flattening_max_depth
+      value: 0
   loaders:
   - name: target-jsonl
     variant: andyh1203
